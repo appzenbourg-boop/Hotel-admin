@@ -4,6 +4,8 @@ import { authOptions } from '@/lib/auth/options'
 import { prisma } from '@/lib/db'
 import { hash } from 'bcryptjs'
 
+export const dynamic = 'force-dynamic'
+
 export async function GET(request: Request) {
     const session = await getServerSession(authOptions)
     if (!session || !['SUPER_ADMIN', 'HOTEL_ADMIN', 'MANAGER', 'RECEPTIONIST'].includes(session.user.role)) {
