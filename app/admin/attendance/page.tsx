@@ -409,7 +409,7 @@ export default function AttendancePage() {
                         {selectedRecord.note && (
                             <div className="p-4 border border-dashed border-border rounded-xl">
                                 <p className="text-xs font-bold text-text-tertiary uppercase mb-2">Internal Note</p>
-                                <p className="text-sm text-text-secondary italic">"{selectedRecord.note}"</p>
+                                <p className="text-sm text-text-secondary italic">&quot;{selectedRecord.note}&quot;</p>
                             </div>
                         )}
                     </div>

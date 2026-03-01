@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import Image from 'next/image'
 import { Plus, Edit2, Trash2, Tag, DollarSign, Image as ImageIcon } from 'lucide-react'
 import Card from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
@@ -83,8 +84,8 @@ export default function MenuPage() {
                         key={cat}
                         onClick={() => setSelectedCategory(cat)}
                         className={`px-4 py-2 rounded-full text-sm font-medium transition-colors whitespace-nowrap ${selectedCategory === cat
-                                ? 'bg-primary text-white shadow-lg shadow-primary/25'
-                                : 'bg-surface border border-white/10 text-text-secondary hover:bg-surface-hover'
+                            ? 'bg-primary text-white shadow-lg shadow-primary/25'
+                            : 'bg-surface border border-white/10 text-text-secondary hover:bg-surface-hover'
                             }`}
                     >
                         {cat}
@@ -124,7 +125,7 @@ export default function MenuPage() {
                             <label className="block text-sm font-medium text-text-secondary">Item Image</label>
                             <div className="border-2 border-dashed border-border rounded-xl aspect-video flex items-center justify-center relative overflow-hidden group hover:border-primary/50 transition-colors">
                                 {formData.image ? (
-                                    <img src={formData.image} alt="Preview" className="w-full h-full object-cover" />
+                                    <Image src={formData.image} alt="Preview" fill className="object-cover" unoptimized />
                                 ) : (
                                     <div className="text-center text-text-tertiary">
                                         <ImageIcon className="w-8 h-8 mx-auto mb-2" />
@@ -153,7 +154,7 @@ export default function MenuPage() {
                     <Card key={item.id} className="group p-0 overflow-hidden flex flex-col h-full hover:shadow-2xl transition-all">
                         <div className="bg-surface-light h-48 w-full relative">
                             {item.image ? (
-                                <img src={item.image} alt={item.name} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110" />
+                                <Image src={item.image} alt={item.name} fill className="object-cover transition-transform duration-500 group-hover:scale-110" unoptimized />
                             ) : (
                                 <div className="w-full h-full flex items-center justify-center bg-white/5">
                                     <Utensils className="w-12 h-12 text-text-tertiary opacity-20" />

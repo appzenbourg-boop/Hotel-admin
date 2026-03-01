@@ -11,13 +11,17 @@ export async function POST(req: Request) {
         const guest = await prisma.guest.findFirst()
         const guestId = guest?.id
 
+        const property = await prisma.property.findFirst()
+        if (!property) return new NextResponse('No property found', { status: 404 })
+
         await prisma.serviceRequest.create({
             data: {
-                title: item,
+                title: item || 'Service Request',
                 description,
-                type: category, // Assuming simple string match for now or map to enum
-                priority,
-                guestId: guestId,
+                type: 'ROOM_SERVICE', // Default for now
+                priority: (priority as any) || 'NORMAL',
+                guestId: guestId as string,
+                propertyId: property.id,
                 status: 'PENDING'
             }
         })

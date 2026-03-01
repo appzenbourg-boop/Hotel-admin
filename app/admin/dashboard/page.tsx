@@ -362,7 +362,7 @@ export default function AdminDashboard() {
           >
             <UserCheck className="w-6 h-6 text-primary mb-2" />
             <p className="font-medium text-text-primary">Express Check-in</p>
-            <p className="text-xs text-text-secondary mt-1">Today's arrivals</p>
+            <p className="text-xs text-text-secondary mt-1">Today&apos;s arrivals</p>
           </button>
           <button
             onClick={() => {

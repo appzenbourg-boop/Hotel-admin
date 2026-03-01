@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback, useMemo } from 'react'
+import Image from 'next/image'
 import { useSession } from 'next-auth/react'
 import {
     Plus, Utensils, Coffee, Edit2, Lock,
@@ -212,10 +213,13 @@ export default function ContentPage() {
                                     <div key={item.id} className="py-4 flex items-center justify-between group hover:bg-surface-light/30 px-4 -mx-4 rounded-xl transition-colors">
                                         <div className="flex items-center gap-4">
                                             {item.image ? (
-                                                <img
+                                                <Image
                                                     src={item.image}
                                                     alt={item.name}
-                                                    className="w-16 h-16 rounded-xl object-cover shadow-lg"
+                                                    width={64}
+                                                    height={64}
+                                                    className="rounded-xl object-cover shadow-lg"
+                                                    unoptimized
                                                 />
                                             ) : (
                                                 <div className="w-16 h-16 bg-surface-light rounded-xl flex items-center justify-center text-text-tertiary border border-border">
@@ -314,10 +318,12 @@ export default function ContentPage() {
                         <div className="relative group aspect-square rounded-2xl overflow-hidden bg-surface-light border border-dashed border-border flex flex-col items-center justify-center transition-all hover:border-primary/50">
                             {formData.image ? (
                                 <>
-                                    <img
+                                    <Image
                                         src={formData.image}
                                         alt="Preview"
-                                        className="w-full h-full object-cover"
+                                        fill
+                                        className="object-cover"
+                                        unoptimized
                                     />
                                     <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
                                         <label className="p-2 bg-white rounded-full cursor-pointer hover:scale-110 transition-transform text-slate-900">

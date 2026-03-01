@@ -105,11 +105,15 @@ export async function POST(req: NextRequest) {
                 }
             })
 
+            // Get a property to link to if not provided (should ideally be from context/session)
+            const property = await tx.property.findFirst()
+
             const staff = await tx.staff.create({
                 data: {
                     userId: user.id,
+                    propertyId: property?.id || '',
                     employeeId,
-                    department,
+                    department: department as any,
                     designation,
                     baseSalary: parseFloat(baseSalary),
                     dateOfJoining: new Date()

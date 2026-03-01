@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useCallback } from 'react'
 import { useSession } from 'next-auth/react'
 import Card from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
@@ -44,7 +44,7 @@ export default function PayrollPage() {
     const [selectedPayroll, setSelectedPayroll] = useState<any>(null)
     const [showSlipModal, setShowSlipModal] = useState(false)
 
-    const fetchPayroll = async () => {
+    const fetchPayroll = useCallback(async () => {
         setLoading(true)
         try {
             const [year, m] = month.split('-')
@@ -64,11 +64,11 @@ export default function PayrollPage() {
         } finally {
             setLoading(false)
         }
-    }
+    }, [month])
 
     useEffect(() => {
         fetchPayroll()
-    }, [month])
+    }, [fetchPayroll])
 
     const filteredPayroll = useMemo(() => {
         return payrollData.filter(p => {

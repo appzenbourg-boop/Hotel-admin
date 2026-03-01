@@ -375,6 +375,7 @@ async function main() {
         data: {
             guestId: testGuest.id,
             roomId: rooms[0].id,
+            propertyId: property.id,
             checkIn: new Date(Date.now() + 2 * 24 * 60 * 60 * 1000), // 2 days from now
             checkOut: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000), // 5 days from now
             numberOfGuests: 2,

@@ -1,3 +1,4 @@
+import Image from 'next/image'
 import { cn, getInitials, generateAvatarColor } from '@/lib/utils'
 import { User } from 'lucide-react'
 
@@ -16,17 +17,24 @@ export default function Avatar({ src, name, size = 'md', className }: AvatarProp
     xl: 'w-16 h-16 text-lg',
   }
 
+  const sizeMap = {
+    sm: 32,
+    md: 40,
+    lg: 48,
+    xl: 64,
+  }
+
   if (src) {
     return (
-      <img
-        src={src}
-        alt={name || 'Avatar'}
-        className={cn(
-          'rounded-full object-cover',
-          sizeStyles[size],
-          className
-        )}
-      />
+      <div className={cn('relative rounded-full overflow-hidden shrink-0', sizeStyles[size], className)}>
+        <Image
+          src={src}
+          alt={name || 'Avatar'}
+          fill
+          className="object-cover"
+          unoptimized
+        />
+      </div>
     )
   }
 
