@@ -33,8 +33,10 @@ export default function AdminLoginPage() {
         toast.error('Invalid credentials')
       } else if (result?.ok) {
         toast.success('Login successful!')
-        router.push('/admin/dashboard')
         router.refresh()
+        setTimeout(() => {
+          router.push('/admin/dashboard')
+        }, 300)
       }
     } catch (error) {
       toast.error('Something went wrong. Please try again.')

@@ -28,8 +28,12 @@ export default function StaffLoginPage() {
                 console.error('Login error:', result.error)
                 toast.error(result.error === 'CredentialsSignin' ? 'Invalid email or password' : result.error)
             } else {
-                router.push('/staff')
                 toast.success('Welcome back!')
+                // Refresh to propagate the NextAuth session, then navigate
+                router.refresh()
+                setTimeout(() => {
+                    router.push('/staff')
+                }, 300)
             }
         } catch (error) {
             toast.error('Login failed')
