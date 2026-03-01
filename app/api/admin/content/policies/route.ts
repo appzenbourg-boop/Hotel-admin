@@ -3,6 +3,8 @@ import { prisma } from '@/lib/db'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth/options'
 
+export const dynamic = 'force-dynamic'
+
 export async function GET() {
     const property = await prisma.property.findFirst()
     return NextResponse.json(property?.policies || {})

@@ -3,6 +3,8 @@ import { razorpay } from '@/lib/razorpay'
 import { requireAuth } from '@/lib/auth/middleware'
 import { prisma } from '@/lib/db'
 
+export const dynamic = 'force-dynamic'
+
 export async function POST(req: NextRequest) {
     try {
         const authResult = await requireAuth(req, ['SUPER_ADMIN', 'HOTEL_ADMIN'])

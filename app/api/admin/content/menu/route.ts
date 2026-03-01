@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
 import { requireAuth } from '@/lib/auth/middleware'
 
+export const dynamic = 'force-dynamic'
+
 /**
  * GET /api/admin/content/menu
  * Fetch menu items for the current property context

@@ -3,6 +3,8 @@ import prisma from '@/lib/db';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 
+export const dynamic = 'force-dynamic';
+
 const JWT_SECRET = process.env.NEXTAUTH_SECRET || 'dev-secret-123';
 
 export async function POST(request: NextRequest) {
