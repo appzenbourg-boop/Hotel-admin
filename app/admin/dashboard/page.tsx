@@ -13,7 +13,7 @@ import Input from '@/components/ui/Input'
 import Select from '@/components/ui/Select'
 import { toast } from 'sonner'
 import { formatCurrency, formatRelativeTime, calculateOccupancy } from '@/lib/utils'
-import { buildContextUrl } from '@/lib/admin-context'
+import { buildContextUrl, isGlobalContext } from '@/lib/admin-context'
 import {
   ArrowUp,
   ArrowDown,
@@ -50,6 +50,34 @@ export default function AdminDashboard() {
     description: '',
     priority: 'NORMAL'
   })
+
+  /**
+   * Guard: blocks property-specific actions when in Global Overview.
+   * Shows a rich toast directing the admin to select a hotel first.
+   * Returns true if blocked, false if ok to proceed.
+   */
+  const requireHotel = (actionName: string = 'this action'): boolean => {
+    if (isGlobalContext()) {
+      toast.error(`Please select a hotel first`, {
+        description: `"${actionName}" requires a specific hotel context. Use the hotel switcher in the header.`,
+        action: {
+          label: 'Select Hotel →',
+          onClick: () => {
+            // Click the PropertySwitcher button in the header
+            const switcher = document.querySelector('[data-property-switcher]') as HTMLButtonElement
+            if (switcher) switcher.click()
+            else {
+              // Fallback: scroll to top so user can see switcher
+              window.scrollTo({ top: 0, behavior: 'smooth' })
+            }
+          }
+        },
+        duration: 5000,
+      })
+      return true // blocked
+    }
+    return false // ok to proceed
+  }
 
   // Fetch Rooms for Service Modal
   const fetchRooms = async () => {
@@ -99,9 +127,12 @@ export default function AdminDashboard() {
         setShowServiceModal(false)
         setServiceForm({ roomId: '', type: 'HOUSEKEEPING', title: '', description: '', priority: 'NORMAL' })
       } else {
-        toast.error('Failed to raise ticket')
+        const errText = await res.text()
+        console.error('[RAISE_TICKET_ERROR]', res.status, errText)
+        toast.error(`Failed to raise ticket: ${errText || res.statusText}`)
       }
     } catch (error) {
+      console.error('[RAISE_TICKET_EXCEPTION]', error)
       toast.error('Something went wrong')
     }
   }
@@ -189,7 +220,7 @@ export default function AdminDashboard() {
   const { stats } = data
 
   const handleEscalate = async () => {
-    // Find the first housekeeping task ID to escalate
+    if (requireHotel('Escalate Issue')) return
     const oldestTask = data.housekeepingTasks[0]
     if (!oldestTask) {
       toast.info('No pending tasks to escalate')
@@ -197,18 +228,19 @@ export default function AdminDashboard() {
     }
 
     try {
-      const res = await fetch(`/api/services/${oldestTask.id}`, {
-        method: 'PATCH',
+      const res = await fetch('/api/admin/services/assign', {
+        method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ priority: 'URGENT' })
+        body: JSON.stringify({ requestId: oldestTask.id, priority: 'URGENT' })
       })
 
       if (res.ok) {
         toast.success(`Task in Room ${oldestTask.room} escalated to URGENT priority`, {
           description: 'Staff notifications sent.'
         })
-        // Refresh dashboard
         router.refresh()
+      } else {
+        toast.error('Failed to escalate task')
       }
     } catch (error) {
       toast.error('Failed to escalate task')
@@ -241,6 +273,7 @@ export default function AdminDashboard() {
               className="bg-white/10 hover:bg-white/20 border-white/10 text-white backdrop-blur-md"
               leftIcon={<Bell className="w-4 h-4" />}
               onClick={() => {
+                if (requireHotel('Raise Service Request')) return
                 fetchRooms()
                 setShowServiceModal(true)
               }}
@@ -253,6 +286,7 @@ export default function AdminDashboard() {
               className="bg-white/10 hover:bg-white/20 border-white/10 text-white backdrop-blur-md"
               leftIcon={<UserCheck className="w-4 h-4" />}
               onClick={() => {
+                if (requireHotel('Guest Check-in')) return
                 fetchReservations()
                 setShowCheckInModal(true)
               }}
@@ -264,7 +298,10 @@ export default function AdminDashboard() {
               variant="primary"
               className="shadow-lg shadow-indigo-500/20"
               leftIcon={<Plus className="w-4 h-4" />}
-              onClick={() => window.location.href = '/admin/bookings/new'}
+              onClick={() => {
+                if (requireHotel('New Booking')) return
+                window.location.href = '/admin/bookings/new'
+              }}
             >
               New Booking
             </Button>
@@ -355,6 +392,7 @@ export default function AdminDashboard() {
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <button
             onClick={() => {
+              if (requireHotel('Express Check-in')) return
               fetchReservations()
               setShowCheckInModal(true)
             }}
@@ -366,6 +404,7 @@ export default function AdminDashboard() {
           </button>
           <button
             onClick={() => {
+              if (requireHotel('Raise Ticket')) return
               fetchRooms()
               setShowServiceModal(true)
             }}
@@ -376,7 +415,10 @@ export default function AdminDashboard() {
             <p className="text-xs text-text-secondary mt-1">Room services</p>
           </button>
           <button
-            onClick={() => router.push('/admin/bookings/new')}
+            onClick={() => {
+              if (requireHotel('New Booking')) return
+              router.push('/admin/bookings/new')
+            }}
             className="p-4 bg-info/10 hover:bg-info/20 rounded-lg transition-colors text-left"
           >
             <Plus className="w-6 h-6 text-info mb-2" />
@@ -686,7 +728,9 @@ export default function AdminDashboard() {
                   { value: 'HOUSEKEEPING', label: 'Housekeeping' },
                   { value: 'MAINTENANCE', label: 'Maintenance' },
                   { value: 'ROOM_SERVICE', label: 'Room Service' },
-                  { value: 'OTHER', label: 'Other' },
+                  { value: 'FOOD_ORDER', label: 'Food & Beverage' },
+                  { value: 'LAUNDRY', label: 'Laundry' },
+                  { value: 'CONCIERGE', label: 'Concierge' },
                 ]}
               />
             </div>

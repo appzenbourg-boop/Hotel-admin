@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useMemo, useCallback } from 'react'
 import { useSession } from 'next-auth/react'
+import { useRouter } from 'next/navigation'
 import Card from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
 import Avatar from '@/components/common/Avatar'
@@ -28,6 +29,7 @@ import { buildContextUrl } from '@/lib/admin-context'
 
 export default function PayrollPage() {
     const { data: session } = useSession()
+    const router = useRouter()
     const [month, setMonth] = useState(`${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}`)
     const [payrollData, setPayrollData] = useState<any[]>([])
     const [stats, setStats] = useState({
@@ -72,8 +74,8 @@ export default function PayrollPage() {
 
     const filteredPayroll = useMemo(() => {
         return payrollData.filter(p => {
-            const matchesSearch = p.staff.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                p.staff.role.toLowerCase().includes(searchQuery.toLowerCase());
+            const matchesSearch = (p.staff?.name || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+                (p.staff?.department || '').toLowerCase().includes(searchQuery.toLowerCase());
             const matchesStatus = statusFilter === 'ALL' || p.status === statusFilter;
             return matchesSearch && matchesStatus;
         });
@@ -129,44 +131,95 @@ export default function PayrollPage() {
 
     const handleRazorpayPayment = async (payroll: any) => {
         try {
-            // 1. Create Order
+            // 0. Guard: Check Razorpay SDK is loaded in window
+            if (typeof (window as any).Razorpay === 'undefined') {
+                toast.error('Razorpay SDK not loaded', {
+                    description: 'Please refresh the page and try again. Ensure you have internet access.',
+                })
+                return
+            }
+
+            // 0b. Guard: Razorpay rejects zero-amount orders
+            const netSalary = payroll.netSalary || 0
+            if (netSalary <= 0) {
+                toast.error('Cannot process payment', {
+                    description: `Net salary is ₹0. Please run payroll calculation first (click "Run Payroll" for this month) to compute actual salary amounts.`,
+                    duration: 7000,
+                })
+                return
+            }
+
+            toast.loading('Creating payment order...')
+
+            // 1. Create Razorpay Order via backend
             const orderRes = await fetch('/api/payroll/razorpay', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    amount: payroll.netSalary,
-                    currency: 'INR',
                     payrollId: payroll.id
                 })
             })
 
-            if (!orderRes.ok) throw new Error('Order creation failed')
+            toast.dismiss()
+
+            if (!orderRes.ok) {
+                const errData = await orderRes.json().catch(() => ({}))
+                throw new Error(errData.error || `Order creation failed (${orderRes.status})`)
+            }
+
             const order = await orderRes.json()
 
-            // 2. Open Razorpay
+            if (!order.orderId) {
+                throw new Error('Invalid order response from server')
+            }
+
+            // 2. Open Razorpay Checkout modal
             const options = {
-                key: order.key || process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID,
+                key: order.key,
                 amount: order.amount,
-                currency: order.currency,
+                currency: order.currency || 'INR',
                 name: 'Zenbourg Group',
-                description: `Salary Payment - ${payroll.staff.name}`,
+                description: `Salary Payment — ${payroll.staff?.name || 'Employee'}`,
                 order_id: order.orderId,
                 handler: async function (response: any) {
-                    // 3. Verify & Update
+                    // 3. Payment successful — mark as paid
+                    toast.loading('Confirming payment...')
                     await handleMarkAsPaid(payroll.id, 'RAZORPAY')
+                    toast.dismiss()
+                    toast.success('Payment confirmed successfully!', {
+                        description: `Razorpay Payment ID: ${response.razorpay_payment_id}`
+                    })
+                },
+                modal: {
+                    ondismiss: () => {
+                        toast.info('Payment cancelled')
+                    }
                 },
                 prefill: {
-                    name: payroll.staff.name,
-                    email: payroll.staff.email,
-                    contact: payroll.staff.phone
+                    name: payroll.staff?.name || '',
+                    email: payroll.staff?.email || '',
+                    contact: payroll.staff?.phone || ''
                 },
-                theme: { color: "#6366f1" }
+                theme: { color: '#6366f1' }
             }
 
             const rzp = new (window as any).Razorpay(options)
+
+            // Handle payment failures from within Razorpay modal
+            rzp.on('payment.failed', function (response: any) {
+                toast.error('Payment failed', {
+                    description: response.error?.description || 'The payment was declined. Please try again.',
+                })
+            })
+
             rzp.open()
-        } catch (error) {
-            toast.error('Payment initialization failed')
+
+        } catch (error: any) {
+            toast.dismiss()
+            console.error('[RAZORPAY_PAYMENT_ERROR]', error)
+            toast.error('Payment initialization failed', {
+                description: error.message || 'Please check your connection and try again.',
+            })
         }
     }
 
@@ -176,14 +229,15 @@ export default function PayrollPage() {
             return;
         }
         downloadCSV(filteredPayroll.map(p => ({
-            Employee: p.staff.name,
-            Role: p.staff.role,
+            Employee: p.staff?.name || 'N/A',
+            Department: p.staff?.department || 'N/A',
             BaseSalary: p.baseSalary,
-            Bonuses: p.bonus,
+            Incentives: p.incentives,
+            Bonuses: p.bonuses,
             Deductions: p.deductions,
             NetSalary: p.netSalary,
             Status: p.status,
-            PaidDate: p.paidDate ? new Date(p.paidDate).toLocaleDateString() : 'N/A'
+            PaidDate: p.paidAt ? new Date(p.paidAt).toLocaleDateString() : 'N/A'
         })), `Payroll_Report_${month}`);
         toast.success('Payroll report exported to CSV');
     };
@@ -214,7 +268,24 @@ export default function PayrollPage() {
                 </div>
             </div>
 
-            {/* Stats Grid */}
+            {/* ⚠️ Zero-salary warning banner */}
+            {!loading && payrollData.length > 0 && payrollData.every(p => (p.netSalary || 0) === 0) && (
+                <div className="flex items-start gap-4 p-4 bg-amber-500/10 border border-amber-500/30 rounded-2xl">
+                    <AlertCircle className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
+                    <div className="flex-1">
+                        <p className="text-sm font-bold text-amber-300">All salaries are ₹0 — Razorpay payments will fail</p>
+                        <p className="text-xs text-amber-400/80 mt-1">
+                            Staff members were created without a base salary set. Go to <strong>Staff → Edit Staff</strong> and set each person's base salary, then click <strong>"Run Payroll"</strong> again to recalculate.
+                        </p>
+                    </div>
+                    <button
+                        onClick={() => window.location.href = '/admin/staff'}
+                        className="shrink-0 text-xs font-bold text-amber-300 border border-amber-400/40 px-3 py-1.5 rounded-lg hover:bg-amber-400/10 transition-colors"
+                    >
+                        Go to Staff →
+                    </button>
+                </div>
+            )}
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                 <Card className="p-5 border-primary/20 bg-primary/5 relative overflow-hidden group">
                     <DollarSign className="absolute -right-2 -bottom-2 w-20 h-20 text-primary/10 group-hover:scale-110 transition-transform" />
@@ -307,10 +378,10 @@ export default function PayrollPage() {
                                     <tr key={p.id} className="group hover:bg-white/[0.02] transition-colors">
                                         <td className="px-6 py-4">
                                             <div className="flex items-center gap-3">
-                                                <Avatar name={p.staff.name} size="sm" />
+                                                <Avatar name={p.staff?.name || '?'} size="sm" />
                                                 <div>
-                                                    <p className="font-bold text-text-primary text-sm">{p.staff.name}</p>
-                                                    <p className="text-[10px] text-text-tertiary font-bold uppercase tracking-widest mt-0.5">{p.staff.role}</p>
+                                                    <p className="font-bold text-text-primary text-sm">{p.staff?.name || 'Unknown'}</p>
+                                                    <p className="text-[10px] text-text-tertiary font-bold uppercase tracking-widest mt-0.5">{p.staff?.department || 'N/A'}</p>
                                                 </div>
                                             </div>
                                         </td>
@@ -319,8 +390,8 @@ export default function PayrollPage() {
                                         </td>
                                         <td className="px-6 py-4 text-center">
                                             <div className="flex flex-col items-center">
-                                                <span className="text-[10px] text-emerald-400 font-bold">+{formatCurrency(p.bonus)}</span>
-                                                <span className="text-[10px] text-rose-400 font-bold">-{formatCurrency(p.deductions)}</span>
+                                                <span className="text-[10px] text-emerald-400 font-bold">+{formatCurrency((p.incentives || 0) + (p.bonuses || 0))}</span>
+                                                <span className="text-[10px] text-rose-400 font-bold">-{formatCurrency(p.deductions || 0)}</span>
                                             </div>
                                         </td>
                                         <td className="px-6 py-4 text-center">
@@ -337,7 +408,8 @@ export default function PayrollPage() {
                                                     variant="ghost"
                                                     size="sm"
                                                     className="h-8 w-8 p-0 hover:bg-white/10 text-text-secondary"
-                                                    onClick={() => previewSlip(p)}
+                                                    title="View & Download Salary Slip"
+                                                    onClick={() => router.push(`/admin/payroll/salary-slip/${p.id}`)}
                                                 >
                                                     <Download className="w-4 h-4" />
                                                 </Button>
@@ -411,11 +483,11 @@ export default function PayrollPage() {
                                     </div>
                                     <div className="flex justify-between py-2 border-b border-white/5">
                                         <span className="text-sm text-text-secondary">Performance Bonus</span>
-                                        <span className="text-sm font-mono text-emerald-400">+{formatCurrency(selectedPayroll.bonus)}</span>
+                                        <span className="text-sm font-mono text-emerald-400">+{formatCurrency(selectedPayroll.incentives || 0)}</span>
                                     </div>
                                     <div className="flex justify-between py-2 border-b border-white/5">
                                         <span className="text-sm text-text-secondary">Deductions (Taxes/Leaves)</span>
-                                        <span className="text-sm font-mono text-rose-400">-{formatCurrency(selectedPayroll.deductions)}</span>
+                                        <span className="text-sm font-mono text-rose-400">-{formatCurrency(selectedPayroll.deductions || 0)}</span>
                                     </div>
                                     <div className="flex justify-between py-4 mt-2">
                                         <span className="text-lg font-black text-text-primary uppercase tracking-tighter">Net Payable Amount</span>
@@ -429,13 +501,13 @@ export default function PayrollPage() {
                             <Button
                                 variant="primary"
                                 className="w-full"
-                                leftIcon={<Download className="w-4 h-4" />}
+                                leftIcon={<ExternalLink className="w-4 h-4" />}
                                 onClick={() => {
-                                    toast.success('Downloading PDF Slip...');
-                                    // Simulation of PDF generation
+                                    setShowSlipModal(false);
+                                    router.push(`/admin/payroll/salary-slip/${selectedPayroll.id}`);
                                 }}
                             >
-                                Download Official PDF
+                                Open Full Slip &amp; Download PDF
                             </Button>
                             {selectedPayroll.status === 'PENDING' && (
                                 <div className="grid grid-cols-2 gap-3">

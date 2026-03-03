@@ -10,17 +10,39 @@ export async function GET(request: Request) {
     if (!session) return new NextResponse('Unauthorized', { status: 401 })
 
     try {
-        const propertyId = session.user.propertyId
-        if (!propertyId) return new NextResponse('Unauthorized', { status: 401 })
+        const { searchParams } = new URL(request.url)
+        const queryPropertyId = searchParams.get('propertyId')
+        const statusFilter = searchParams.get('status') // optional: ALL, PENDING, etc.
+
+        const where: any = {}
+
+        // SUPER_ADMIN has no propertyId on session — they can see all or filter by query param
+        if (session.user.role === 'SUPER_ADMIN') {
+            if (queryPropertyId && queryPropertyId !== 'ALL') {
+                where.propertyId = queryPropertyId
+            }
+            // else: no filter — show all properties
+        } else {
+            const propertyId = session.user.propertyId
+            if (!propertyId) return new NextResponse('Unauthorized', { status: 401 })
+            where.propertyId = propertyId
+        }
+
+        // Status filter — default: hide only COMPLETED
+        if (statusFilter && statusFilter !== 'ALL') {
+            where.status = statusFilter
+        } else {
+            where.status = { not: 'COMPLETED' }
+        }
 
         const services = await prisma.serviceRequest.findMany({
-            where: {
-                propertyId: propertyId,
-                status: { not: 'COMPLETED' }
-            }, // Correctly close the 'where' object
+            where,
             include: {
                 room: { select: { roomNumber: true } },
-                guest: { select: { name: true } }
+                guest: { select: { name: true } },
+                assignedTo: {
+                    include: { user: { select: { name: true } } }
+                }
             },
             orderBy: { createdAt: 'desc' }
         })
@@ -30,15 +52,20 @@ export async function GET(request: Request) {
             room: s.room?.roomNumber || 'N/A',
             guest: s.guest?.name || 'Unknown',
             type: s.type,
+            title: s.title,
+            description: s.description,
+            priority: s.priority,
             status: s.status,
+            assignedTo: s.assignedTo,
             requestTime: s.createdAt,
             slaLimit: s.slaMinutes
         }))
 
         return NextResponse.json(formatted)
 
-    } catch (error) {
-        return new NextResponse('Internal Server Error', { status: 500 })
+    } catch (error: any) {
+        console.error('[SERVICE_GET_ERROR]', error?.message || error)
+        return new NextResponse(error?.message || 'Internal Server Error', { status: 500 })
     }
 }
 
@@ -49,11 +76,11 @@ export async function POST(request: Request) {
     try {
         const body = await request.json()
         const { roomId, type, title, description, priority = 'NORMAL' } = body
-        const propertyId = session.user.propertyId
 
-        if (!propertyId) return new NextResponse('Missing Property ID', { status: 400 })
+        if (!roomId) return new NextResponse('roomId is required', { status: 400 })
+        if (!title) return new NextResponse('title is required', { status: 400 })
 
-        // Check if room is occupied to link the guest
+        // Check if room is occupied to link the guest AND get the propertyId from room
         const room = await prisma.room.findUnique({
             where: { id: roomId },
             include: {
@@ -65,6 +92,11 @@ export async function POST(request: Request) {
         })
 
         if (!room) return new NextResponse('Room not found', { status: 404 })
+
+        // For SUPER_ADMIN, propertyId may be null on session — derive it from the room
+        const propertyId = session.user.propertyId || room.propertyId
+
+        if (!propertyId) return new NextResponse('Cannot determine property', { status: 400 })
 
         const guestId = room.bookings[0]?.guestId
 
@@ -78,13 +110,13 @@ export async function POST(request: Request) {
                 description,
                 status: 'PENDING',
                 priority,
-                slaMinutes: type === 'MAINTENANCE' ? 60 : 30 // Example SLAs
+                slaMinutes: type === 'MAINTENANCE' ? 60 : 30
             }
         })
 
         return NextResponse.json(serviceRequest)
-    } catch (error) {
-        console.error('[SERVICE_POST_ERROR]', error)
-        return new NextResponse('Internal Server Error', { status: 500 })
+    } catch (error: any) {
+        console.error('[SERVICE_POST_ERROR]', error?.message || error)
+        return new NextResponse(error?.message || 'Internal Server Error', { status: 500 })
     }
 }

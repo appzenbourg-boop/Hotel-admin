@@ -2,12 +2,16 @@
 
 import { useState, useEffect } from 'react'
 import { useSession, signOut } from 'next-auth/react'
-import { Bell, Search, LogOut, User, Settings } from 'lucide-react'
+import { useRouter } from 'next/navigation'
+import { Bell, Search, LogOut, User, Settings, Building2 } from 'lucide-react'
 import Avatar from '../common/Avatar'
 import PropertySwitcher from './PropertySwitcher'
 import { cn } from '@/lib/utils'
+import { isGlobalContext } from '@/lib/admin-context'
+import { toast } from 'sonner'
 
 export default function Header() {
+  const router = useRouter()
   const [showNotifications, setShowNotifications] = useState(false)
   const [showProfile, setShowProfile] = useState(false)
   const { data: session } = useSession()
@@ -65,7 +69,26 @@ export default function Header() {
       {/* Right Section */}
       <div className="flex items-center gap-4">
         {/* Quick Actions */}
-        <button className="btn-primary btn text-sm">
+        <button
+          className="btn-primary btn text-sm"
+          onClick={() => {
+            if (session?.user?.role === 'SUPER_ADMIN' && isGlobalContext()) {
+              toast.error('Please select a hotel first', {
+                description: '"New Booking" requires a specific hotel. Use the switcher above.',
+                action: {
+                  label: 'Select Hotel →',
+                  onClick: () => {
+                    const switcher = document.querySelector('[data-property-switcher]') as HTMLButtonElement
+                    if (switcher) switcher.click()
+                  }
+                },
+                duration: 5000,
+              })
+              return
+            }
+            router.push('/admin/bookings/new')
+          }}
+        >
           + New Booking
         </button>
 
@@ -145,11 +168,17 @@ export default function Header() {
                   <p className="text-sm text-text-secondary">{user.email}</p>
                 </div>
                 <div className="p-2">
-                  <button className="flex items-center gap-3 w-full px-3 py-2 text-sm text-text-primary hover:bg-surface-light rounded transition-colors">
+                  <button
+                    onClick={() => { setShowProfile(false); router.push('/admin/settings') }}
+                    className="flex items-center gap-3 w-full px-3 py-2 text-sm text-text-primary hover:bg-surface-light rounded transition-colors"
+                  >
                     <User className="w-4 h-4" />
                     Profile
                   </button>
-                  <button className="flex items-center gap-3 w-full px-3 py-2 text-sm text-text-primary hover:bg-surface-light rounded transition-colors">
+                  <button
+                    onClick={() => { setShowProfile(false); router.push('/admin/settings') }}
+                    className="flex items-center gap-3 w-full px-3 py-2 text-sm text-text-primary hover:bg-surface-light rounded transition-colors"
+                  >
                     <Settings className="w-4 h-4" />
                     Settings
                   </button>

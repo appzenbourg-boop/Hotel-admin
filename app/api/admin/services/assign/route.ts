@@ -13,14 +13,38 @@ export async function POST(request: Request) {
 
     try {
         const body = await request.json()
-        const { requestId, assignedToId, priority } = body
+        // Accept both requestId and serviceId for compatibility
+        const requestId = body.requestId || body.serviceId
+        const { assignedToId, priority, status } = body
+
+        if (!requestId) {
+            return new NextResponse('requestId is required', { status: 400 })
+        }
+
+        const updateData: any = {}
+        if (assignedToId) updateData.assignedToId = assignedToId
+        // priority must be: LOW, NORMAL, HIGH, URGENT — 'MEDIUM' is NOT valid
+        if (priority && ['LOW', 'NORMAL', 'HIGH', 'URGENT'].includes(priority)) {
+            updateData.priority = priority
+        }
+        if (status) {
+            updateData.status = status
+            if (status === 'ACCEPTED') updateData.acceptedAt = new Date()
+            if (status === 'IN_PROGRESS') updateData.startedAt = new Date()
+            if (status === 'COMPLETED') updateData.completedAt = new Date()
+        } else if (assignedToId) {
+            // Auto-set ACCEPTED when assigning without explicit status
+            updateData.status = 'ACCEPTED'
+            updateData.acceptedAt = new Date()
+        }
 
         const updated = await prisma.serviceRequest.update({
             where: { id: requestId },
-            data: {
-                assignedToId,
-                status: 'ACCEPTED', // Change status to accepted when assigned
-                priority: priority || 'MEDIUM'
+            data: updateData,
+            include: {
+                assignedTo: {
+                    include: { user: { select: { name: true } } }
+                }
             }
         })
 

@@ -10,6 +10,7 @@ import Modal from '@/components/ui/Modal'
 import Select from '@/components/ui/Select'
 import Input from '@/components/ui/Input'
 import { toast } from 'sonner'
+import { buildContextUrl } from '@/lib/admin-context'
 
 export default function ServicesPage() {
     const [requests, setRequests] = useState<any[]>([])
@@ -32,18 +33,23 @@ export default function ServicesPage() {
     const fetchServices = async () => {
         setLoading(true)
         try {
-            const res = await fetch('/api/admin/services')
+            // Use buildContextUrl so propertyId context matches dashboard context
+            const res = await fetch(buildContextUrl('/api/admin/services'))
             if (res.ok) {
                 const data = await res.json()
-                // The admin API returns an array directly
                 const parsed = data.map((d: any) => ({
                     ...d,
                     createdAt: new Date(d.requestTime || d.createdAt)
                 }))
                 setRequests(parsed)
+            } else {
+                const errText = await res.text()
+                console.error('[FETCH_SERVICES_ERROR]', res.status, errText)
+                toast.error(`Failed to load services: ${errText || res.statusText}`)
             }
         } catch (error) {
-            console.error(error)
+            console.error('[FETCH_SERVICES_EXCEPTION]', error)
+            toast.error('Could not connect to server')
         } finally {
             setLoading(false)
         }
@@ -72,12 +78,12 @@ export default function ServicesPage() {
         if (!assignmentId || !selectedRequest) return
         setIsAssigning(true)
         try {
-            const res = await fetch(`/api/services/${selectedRequest.id}`, {
-                method: 'PATCH',
+            const res = await fetch(`/api/admin/services/assign`, {
+                method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    assignedToId: assignmentId,
-                    status: 'ACCEPTED'
+                    requestId: selectedRequest.id,
+                    assignedToId: assignmentId
                 })
             })
 
@@ -87,7 +93,8 @@ export default function ServicesPage() {
                 setAssignmentId('')
                 fetchServices()
             } else {
-                toast.error('Failed to assign request')
+                const errText = await res.text()
+                toast.error(`Failed to assign: ${errText}`)
             }
         } catch (error) {
             toast.error('Something went wrong')
@@ -106,7 +113,7 @@ export default function ServicesPage() {
                 return
             }
 
-            const res = await fetch('/api/services', {
+            const res = await fetch('/api/admin/services', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -134,14 +141,14 @@ export default function ServicesPage() {
 
     const handleUpdateStatus = async (id: string, status: string) => {
         try {
-            const res = await fetch(`/api/services/${id}`, {
-                method: 'PATCH',
+            const res = await fetch('/api/admin/services/assign', {
+                method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ status })
+                body: JSON.stringify({ requestId: id, status })
             })
 
             if (res.ok) {
-                toast.success(`Request marked as ${status.toLowerCase()}`)
+                toast.success(`Request marked as ${status.toLowerCase().replace('_', ' ')}`)
                 fetchServices()
             } else {
                 toast.error('Failed to update request')
@@ -225,75 +232,83 @@ export default function ServicesPage() {
                 {loading ? (
                     <div className="text-center p-12 text-text-secondary animate-pulse">Loading requests...</div>
                 ) : (
-                    requests.map(req => (
-                        <div
-                            key={req.id}
-                            onClick={() => req.status === 'PENDING' ? setSelectedRequest(req) : null}
-                            className={`relative overflow-hidden backdrop-blur-xl rounded-2xl p-0.5 transition-all hover:scale-[1.01] hover:shadow-2xl cursor-pointer group ${getSLAColor(req).includes('danger') ? 'bg-gradient-to-r from-rose-500/50 to-orange-500/50' :
-                                getSLAColor(req).includes('warning') ? 'bg-gradient-to-r from-amber-500/50 to-yellow-500/50' :
-                                    'bg-gradient-to-r from-white/[0.08] to-white/[0.04]'
-                                }`}
-                        >
-                            <div className="bg-surface/90 h-full w-full rounded-[14px] p-5 flex items-center justify-between backdrop-blur-xl">
-                                <div className="flex items-center gap-5">
-                                    <div className="w-14 h-14 rounded-2xl bg-surface-light border border-white/[0.05] flex items-center justify-center font-bold text-xl shadow-inner text-text-secondary">
-                                        {req.room}
-                                    </div>
-                                    <div>
-                                        <div className="flex items-center gap-3">
-                                            <h3 className="font-bold text-lg text-text-primary capitalize">{req.type.replace('_', ' ')}</h3>
-                                            <Badge variant={req.status === 'PENDING' ? 'warning' : req.status === 'OVERDUE' ? 'danger' : req.status === 'COMPLETED' ? 'success' : 'info'}>
-                                                {req.status}
-                                            </Badge>
+                    requests.length === 0 ? (
+                        <div className="flex flex-col items-center justify-center py-20 text-center border border-dashed border-white/10 rounded-2xl">
+                            <CheckCircle2 className="w-12 h-12 text-text-tertiary mb-4 opacity-30" />
+                            <p className="text-text-secondary font-semibold">No active service requests</p>
+                            <p className="text-text-tertiary text-sm mt-1">All caught up! Click "New Request" to create one.</p>
+                        </div>
+                    ) : (
+                        requests.map(req => (
+                            <div
+                                key={req.id}
+                                onClick={() => req.status === 'PENDING' ? setSelectedRequest(req) : null}
+                                className={`relative overflow-hidden backdrop-blur-xl rounded-2xl p-0.5 transition-all hover:scale-[1.01] hover:shadow-2xl cursor-pointer group ${getSLAColor(req).includes('danger') ? 'bg-gradient-to-r from-rose-500/50 to-orange-500/50' :
+                                    getSLAColor(req).includes('warning') ? 'bg-gradient-to-r from-amber-500/50 to-yellow-500/50' :
+                                        'bg-gradient-to-r from-white/[0.08] to-white/[0.04]'
+                                    }`}
+                            >
+                                <div className="bg-surface/90 h-full w-full rounded-[14px] p-5 flex items-center justify-between backdrop-blur-xl">
+                                    <div className="flex items-center gap-5">
+                                        <div className="w-14 h-14 rounded-2xl bg-surface-light border border-white/[0.05] flex items-center justify-center font-bold text-xl shadow-inner text-text-secondary">
+                                            {req.room}
                                         </div>
-                                        <p className="text-sm text-text-secondary mt-1 font-medium">{req.title || 'Service Request'}</p>
-                                        <p className="text-xs text-text-tertiary mt-1 flex items-center gap-1">
-                                            <span className="w-1.5 h-1.5 rounded-full bg-primary/50"></span>
-                                            Guest: {req.guest} • Assigned: {req.assignedTo?.user?.name || 'Unassigned'}
-                                        </p>
+                                        <div>
+                                            <div className="flex items-center gap-3">
+                                                <h3 className="font-bold text-lg text-text-primary capitalize">{req.type.replace('_', ' ')}</h3>
+                                                <Badge variant={req.status === 'PENDING' ? 'warning' : req.status === 'OVERDUE' ? 'danger' : req.status === 'COMPLETED' ? 'success' : 'info'}>
+                                                    {req.status}
+                                                </Badge>
+                                            </div>
+                                            <p className="text-sm text-text-secondary mt-1 font-medium">{req.title || 'Service Request'}</p>
+                                            <p className="text-xs text-text-tertiary mt-1 flex items-center gap-1">
+                                                <span className="w-1.5 h-1.5 rounded-full bg-primary/50"></span>
+                                                Guest: {req.guest} • Assigned: {req.assignedTo?.user?.name || 'Unassigned'}
+                                            </p>
+                                        </div>
                                     </div>
-                                </div>
 
-                                <div className="flex items-center gap-6">
-                                    {(req.status === 'ACCEPTED' || req.status === 'IN_PROGRESS') && (
-                                        <Button
-                                            size="sm"
-                                            variant="secondary"
-                                            className="bg-emerald-500/10 text-emerald-500 border-emerald-500/20 hover:bg-emerald-500/20"
-                                            onClick={(e) => {
-                                                e.stopPropagation();
-                                                handleUpdateStatus(req.id, 'COMPLETED');
-                                            }}
-                                        >
-                                            Complete
-                                        </Button>
-                                    )}
-                                    {req.status === 'ACCEPTED' && (
-                                        <Button
-                                            size="sm"
-                                            variant="secondary"
-                                            onClick={(e) => {
-                                                e.stopPropagation();
-                                                handleUpdateStatus(req.id, 'IN_PROGRESS');
-                                            }}
-                                        >
-                                            Start
-                                        </Button>
-                                    )}
+                                    <div className="flex items-center gap-6">
+                                        {(req.status === 'ACCEPTED' || req.status === 'IN_PROGRESS') && (
+                                            <Button
+                                                size="sm"
+                                                variant="secondary"
+                                                className="bg-emerald-500/10 text-emerald-500 border-emerald-500/20 hover:bg-emerald-500/20"
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    handleUpdateStatus(req.id, 'COMPLETED');
+                                                }}
+                                            >
+                                                Complete
+                                            </Button>
+                                        )}
+                                        {req.status === 'ACCEPTED' && (
+                                            <Button
+                                                size="sm"
+                                                variant="secondary"
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    handleUpdateStatus(req.id, 'IN_PROGRESS');
+                                                }}
+                                            >
+                                                Start
+                                            </Button>
+                                        )}
 
-                                    <div className="text-right">
-                                        <p className="text-[10px] font-bold uppercase tracking-widest text-text-tertiary mb-1">Elapsed Time</p>
-                                        <p className={`text-3xl font-mono font-bold ${getSLAColor(req).includes('danger') ? 'text-rose-400' :
-                                            getSLAColor(req).includes('warning') ? 'text-amber-400' : 'text-text-primary'
-                                            }`}>
-                                            {elapsedTimes[req.id] || '0m'}
-                                        </p>
-                                        <p className="text-xs text-text-tertiary opacity-70 mt-1">Target SLA: {req.slaLimit}m</p>
+                                        <div className="text-right">
+                                            <p className="text-[10px] font-bold uppercase tracking-widest text-text-tertiary mb-1">Elapsed Time</p>
+                                            <p className={`text-3xl font-mono font-bold ${getSLAColor(req).includes('danger') ? 'text-rose-400' :
+                                                getSLAColor(req).includes('warning') ? 'text-amber-400' : 'text-text-primary'
+                                                }`}>
+                                                {elapsedTimes[req.id] || '0m'}
+                                            </p>
+                                            <p className="text-xs text-text-tertiary opacity-70 mt-1">Target SLA: {req.slaLimit}m</p>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
-                        </div>
-                    ))
+                        ))
+                    )
                 )}
             </div>
 

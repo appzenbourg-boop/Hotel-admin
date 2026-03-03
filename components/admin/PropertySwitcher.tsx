@@ -57,6 +57,7 @@ export default function PropertySwitcher() {
     return (
         <div className="relative">
             <button
+                data-property-switcher
                 onClick={() => setIsOpen(!isOpen)}
                 className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-surface-light border border-border hover:bg-border transition-colors outline-none"
             >

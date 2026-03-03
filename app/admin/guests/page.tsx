@@ -1,6 +1,7 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, Suspense } from 'react'
+import { useSearchParams, useRouter } from 'next/navigation'
 import Card from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
 import Table, { Column } from '@/components/ui/Table'
@@ -57,7 +58,9 @@ const mockGuests = [
   },
 ]
 
-export default function GuestsPage() {
+function GuestsPageContent() {
+  const searchParams = useSearchParams()
+  const router = useRouter()
   const [guests, setGuests] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
 
@@ -93,6 +96,15 @@ export default function GuestsPage() {
   useEffect(() => {
     fetchGuests()
   }, [])
+
+  // Auto-open modal when redirected from New Booking page
+  useEffect(() => {
+    if (searchParams.get('addNew') === 'true') {
+      setShowAddModal(true)
+      // Clean up the URL without refreshing
+      router.replace('/admin/guests')
+    }
+  }, [searchParams])
   const [searchQuery, setSearchQuery] = useState('')
   const [filters, setFilters] = useState({
     status: 'ALL',
@@ -494,5 +506,18 @@ export default function GuestsPage() {
         </Modal>
       )}
     </div>
+  )
+}
+
+// Next.js 14: useSearchParams() must be inside a Suspense boundary
+export default function GuestsPage() {
+  return (
+    <Suspense fallback={
+      <div className="flex items-center justify-center h-64 text-text-secondary animate-pulse">
+        Loading guests...
+      </div>
+    }>
+      <GuestsPageContent />
+    </Suspense>
   )
 }

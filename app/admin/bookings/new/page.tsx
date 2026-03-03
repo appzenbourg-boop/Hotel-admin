@@ -121,7 +121,16 @@ export default function NewBookingPage() {
                                         <option key={g.id} value={g.id}>{g.name} ({g.phone})</option>
                                     ))}
                                 </select>
-                                <p className="text-xs text-text-tertiary mt-1">Don&apos;t see the guest? Add them in the Guests list first.</p>
+                                <div className="flex items-center gap-2 mt-2">
+                                    <p className="text-xs text-text-tertiary">Don&apos;t see the guest?</p>
+                                    <button
+                                        type="button"
+                                        onClick={() => router.push('/admin/guests?addNew=true')}
+                                        className="text-xs font-medium text-primary hover:text-primary/80 flex items-center gap-1 transition-colors"
+                                    >
+                                        <span>+</span> Add New Guest
+                                    </button>
+                                </div>
                             </div>
                         </div>
                     </Card>
